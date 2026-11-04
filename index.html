@@ -285,6 +285,22 @@ td.og.empty, td.tot.empty { color: var(--muted); font-weight: 400; }
 
 <script>
 (function () {
+  var senhaCorreta = "dhl2026";
+  var autorizado = sessionStorage.getItem("autorizado");
+
+  if (!autorizado) {
+    var entrada = prompt("Digite a senha para acessar o painel de Recebimento:");
+    if (entrada === senhaCorreta) {
+      sessionStorage.setItem("autorizado", "true");
+    } else {
+      alert("Senha incorreta!");
+      document.body.innerHTML = "<h2 style='color:#ff6b6b;text-align:center;margin-top:20vh;font-family:sans-serif;'>Acesso Negado</h2>";
+      throw new Error("Acesso bloqueado por senha.");
+    }
+  }
+})();
+
+(function () {
   var $ = function (id) { return document.getElementById(id); };
   var store = {
     get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
