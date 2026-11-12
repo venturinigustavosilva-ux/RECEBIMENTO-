@@ -172,7 +172,7 @@ tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 45
 .vt { --p: 0%; display: flex; justify-content: space-between; align-items: baseline; gap: .7em; min-width: 0; padding: .3em .55em; border-radius: 4px; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 26%, transparent) var(--p), var(--surface-2) var(--p)); }
 .vt .c { font: 500 1em/1 var(--font-mono); white-space: nowrap; }
 .vt .c .l { color: var(--accent-text); font-weight: 600; }
-.vt .v { font: 600 1.1em/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.vt .v { font: 600 1.1em/1 var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .vt.zero { opacity: .6; }
 .vt.zero .v { font-weight: 500; }
 .vol-hint { color: var(--muted); }
@@ -448,6 +448,16 @@ td.og.empty, td.tot.empty { color: var(--muted); font-weight: 400; }
     return isNaN(n) ? null : n;
   }
 
+  /* Valor do quadro: número puro ("4.724") ou texto que começa com número ("2,5 P / 2 $"). */
+  function valInfo(t) {
+    t = String(t == null ? '' : t).trim();
+    if (!/^-?\d[\d.,]*(\s|$)/.test(t)) return null;
+    var nums = (t.match(/-?\d[\d.,]*/g) || []).map(parseNum).filter(function (n) { return n != null; });
+    if (!nums.length) return null;
+    var pure = parseNum(t) != null;
+    return { text: pure ? nums[0].toLocaleString('pt-BR') : t.replace(/\s+/g, ' '), num: nums[0], zero: nums.every(function (n) { return n === 0; }) };
+  }
+
   /* Quadro "VOLUME PENDENTE POR SVC" no topo da aba: o título fica numa célula e, abaixo dele,
      os pares valor + SVC, lado a lado. Mantém a mesma disposição (linha e coluna) da planilha. */
   function parseVolume(values) {
@@ -466,7 +476,7 @@ td.og.empty, td.tot.empty { color: var(--muted); font-weight: 400; }
     if (tr < 0) find(function (n) { return n.indexOf('svc') >= 0 && n.indexOf('turno') >= 0; }, lim);
     if (tr < 0 && hr > 0) find(function (n) { return n.indexOf('svc') >= 0; }, Math.min(hr, lim));
     if (tr < 0) return null;
-    var items = [], nrows = 0, ncols = 0;
+    var items = [], nrows = 0, ncols = 0, maxCode = 0, maxVal = 0;
     for (r = tr + 1; r < Math.min(values.length, tr + 13); r++) {
       var line = (values[r] || []).slice(tc), last = line.length;
       while (last > 0 && !String(line[last - 1] == null ? '' : line[last - 1]).trim()) last--;
@@ -474,18 +484,20 @@ td.og.empty, td.tot.empty { color: var(--muted); font-weight: 400; }
       var ri = r - tr - 1;
       for (var j = 0; j < last; j += 2) {
         var a = String(line[j] == null ? '' : line[j]).trim(), b = String(line[j + 1] == null ? '' : line[j + 1]).trim();
-        var na = parseNum(a), nb = parseNum(b), code, num;
-        if (na != null && nb == null && b) { num = na; code = b; }
-        else if (nb != null && na == null && a) { num = nb; code = a; }
+        var va = valInfo(a), vb = valInfo(b), code, v;
+        if (va && !vb && b) { v = va; code = b; }
+        else if (vb && !va && a) { v = vb; code = a; }
         else continue;
-        items.push({ r: ri, c: j / 2, code: code, num: num });
+        items.push({ r: ri, c: j / 2, code: code, num: v.num, text: v.text, zero: v.zero });
+        if (code.length > maxCode) maxCode = code.length;
+        if (v.text.length > maxVal) maxVal = v.text.length;
         if (ri + 1 > nrows) nrows = ri + 1;
         if (j / 2 + 1 > ncols) ncols = j / 2 + 1;
       }
     }
     if (!items.length) return null;
     var max = 0; items.forEach(function (x) { if (x.num > max) max = x.num; });
-    return { title: String(values[tr][tc]).trim(), rows: nrows, cols: ncols, max: max, items: items };
+    return { title: String(values[tr][tc]).trim(), rows: nrows, cols: ncols, max: max, items: items, maxCode: maxCode, maxVal: maxVal };
   }
 
   function parseDelimited(text, force) {
@@ -616,15 +628,15 @@ td.og.empty, td.tot.empty { color: var(--muted); font-weight: 400; }
       return;
     }
     box.hidden = false; $('volTitle').textContent = v.title;
-    grid.style.gridTemplateColumns = 'repeat(' + v.cols + ', minmax(0, 1fr))';
+    grid.style.gridTemplateColumns = 'repeat(' + v.cols + ', minmax(max-content, 1fr))';
     v.items.forEach(function (it) {
-      var t = h('div', 'vt' + (it.num ? '' : ' zero'));
+      var t = h('div', 'vt' + (it.zero ? ' zero' : ''));
       t.style.gridRow = String(it.r + 1); t.style.gridColumn = String(it.c + 1);
       t.style.setProperty('--p', (v.max > 0 ? Math.round(it.num / v.max * 100) : 0) + '%');
       var c = h('span', 'c'), m = /^(.*)_([abc])$/i.exec(it.code);
       if (m) { c.appendChild(document.createTextNode(m[1] + '_')); c.appendChild(h('span', 'l', m[2].toUpperCase())); }
       else c.textContent = it.code;
-      t.appendChild(c); t.appendChild(h('span', 'v', it.num.toLocaleString('pt-BR')));
+      t.appendChild(c); t.appendChild(h('span', 'v', it.text));
       grid.appendChild(t);
     });
   }
@@ -634,7 +646,8 @@ td.og.empty, td.tot.empty { color: var(--muted); font-weight: 400; }
     if (box.hidden || !v) return;
     var w = box.clientWidth - 26;
     if (w <= 0) return;
-    var fs = Math.max(8.5, Math.min(16, w / (v.cols * 9.8)));
+    var per = v.maxCode * 0.6 + v.maxVal * 0.72 + 2.4;
+    var fs = Math.max(8.5, Math.min(16, w / (v.cols * per)));
     box.style.fontSize = fs.toFixed(2) + 'px';
   }
 
@@ -761,7 +774,7 @@ td.og.empty, td.tot.empty { color: var(--muted); font-weight: 400; }
     var lo = 0.7, hi = 2.2;
     for (var i = 0; i < 9; i++) {
       var mid = (lo + hi) / 2; w.style.setProperty('--scale', mid);
-      if (w.scrollHeight <= w.clientHeight + 1) lo = mid; else hi = mid;
+      if (w.scrollHeight <= w.clientHeight + 1 && w.scrollWidth <= w.clientWidth + 1) lo = mid; else hi = mid;
     }
     w.style.setProperty('--scale', lo);
   }
