@@ -179,11 +179,15 @@ tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 45
 .bar #tvExit { display: none; }
 html.framed body { padding-block: 8px; padding-left: 8px; padding-right: 8px; }
 html.tv body { padding-block: 8px; padding-left: 10px; padding-right: 10px; gap: 8px; }
-html.tv .upd .btn, html.tv .bar > *:not(.views):not(.meta):not(#tvExit) { display: none; }
+html.tv .upd .btn, html.tv .bar > *:not(.vgroups):not(.meta):not(#tvExit) { display: none; }
 html.tv .brand h1 { font-size: clamp(20px, 2vw, 44px); }
 html.tv .bar #tvExit { display: inline-flex; opacity: .55; margin-left: .5em; }
 html.tv .bar #tvExit:hover, html.tv .bar #tvExit:focus-visible { opacity: 1; }
 .toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); width: max-content; max-width: min(92vw, 46em); background: var(--surface-2); color: var(--fg); border: 1px solid var(--accent); border-radius: 8px; padding: .7em 1.1em; z-index: 40; box-shadow: 0 10px 30px rgba(0, 0, 0, .4); }
+.vgroups { display: flex; flex-wrap: wrap; align-items: center; gap: .5em 1.1em; }
+.vg { display: flex; align-items: center; gap: .55em; }
+.vg-t { font: 600 .8em/1 var(--font-display); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.vg.on .vg-t { color: var(--accent-text); }
 .views { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .views button { background: var(--surface-2); border: 0; padding: .4em 1.3em; font: 700 1.2em/1 var(--font-display); letter-spacing: .08em; }
 .views button + button { border-left: 1px solid var(--line); }
@@ -216,9 +220,19 @@ td.og.empty, td.tot.empty { color: var(--muted); font-weight: 400; }
 </header>
 
 <div class="bar">
-  <div class="views" id="views" role="group" aria-label="Escolher visão">
-    <button type="button" data-view="t1" aria-pressed="false">T1</button>
-    <button type="button" data-view="t3" aria-pressed="true">T3</button>
+  <div class="vgroups" id="views" role="group" aria-label="Escolher visão">
+    <div class="vg"><span class="vg-t">Volume</span>
+      <div class="views">
+        <button type="button" data-view="vol-t1" aria-pressed="false">T1</button>
+        <button type="button" data-view="vol-t3" aria-pressed="true">T3</button>
+      </div>
+    </div>
+    <div class="vg"><span class="vg-t">Posição</span>
+      <div class="views">
+        <button type="button" data-view="pos-t1" aria-pressed="false">T1</button>
+        <button type="button" data-view="pos-t3" aria-pressed="false">T3</button>
+      </div>
+    </div>
   </div>
   <button class="btn icon-btn" id="tvExit" type="button">Sair do modo TV</button>
   <div class="filter">
@@ -311,15 +325,23 @@ td.og.empty, td.tot.empty { color: var(--muted); font-weight: 400; }
   function norm(s) { return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
 
   /* Links CSV publicados de cada aba. Para trocar de planilha, substitua o endereço entre as aspas. */
+  var BASE = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS1_qSC3pHkHqBEIu3JAD5JaRbJwmSGC2mflvyDFnwoEVUUf94BRB7AupVK58rrKnOHc6xgBNPoG3DG/pub?single=true&output=csv&gid=';
   var VIEWS = {
-    t1: { label: 'T1', url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS1_qSC3pHkHqBEIu3JAD5JaRbJwmSGC2mflvyDFnwoEVUUf94BRB7AupVK58rrKnOHc6xgBNPoG3DG/pub?gid=1887887979&single=true&output=csv' },
-    t3: { label: 'T3', url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS1_qSC3pHkHqBEIu3JAD5JaRbJwmSGC2mflvyDFnwoEVUUf94BRB7AupVK58rrKnOHc6xgBNPoG3DG/pub?gid=1005522033&single=true&output=csv' }
+    'vol-t1': { group: 'Volume',  label: 'T1', name: 'Volume T1',  url: BASE + '1887887979' },
+    'vol-t3': { group: 'Volume',  label: 'T3', name: 'Volume T3',  url: BASE + '1005522033' },
+    'pos-t1': { group: 'Posição', label: 'T1', name: 'Posição T1', url: BASE + '31864573' },
+    'pos-t3': { group: 'Posição', label: 'T3', name: 'Posição T3', url: BASE + '1739193394' }
   };
-  var cur = store.get('rcv.view'); if (!VIEWS[cur]) cur = 't3';
+  var cur = store.get('rcv.view');
+  if (cur === 't1' || cur === 't3') cur = 'vol-' + cur;
+  if (!VIEWS[cur]) cur = 'vol-t3';
   function newState() { return { rows: [], vol: null, source: 'none', loaded: false, updatedAt: Date.now(), note: null }; }
-  var S = { t1: newState(), t3: newState() };
-  var H = { t1: new Set(), t3: new Set() };
-  Object.keys(H).forEach(function (k) { try { JSON.parse(store.get('rcv.hidden.' + k) || '[]').forEach(function (x) { H[k].add(x); }); } catch (e) {} });
+  var S = {}, H = {};
+  Object.keys(VIEWS).forEach(function (k) {
+    S[k] = newState(); H[k] = new Set();
+    var raw = store.get('rcv.hidden.' + k) || (k.indexOf('vol-') === 0 ? store.get('rcv.hidden.' + k.slice(4)) : null);
+    try { JSON.parse(raw || '[]').forEach(function (x) { H[k].add(x); }); } catch (e) {}
+  });
   var state = S[cur], hidden = H[cur];
   var timer = null;
   function saveHidden() { store.set('rcv.hidden.' + cur, JSON.stringify(Array.from(hidden))); }
@@ -429,11 +451,20 @@ td.og.empty, td.tot.empty { color: var(--muted); font-weight: 400; }
   /* Quadro "VOLUME PENDENTE POR SVC" no topo da aba: o título fica numa célula e, abaixo dele,
      os pares valor + SVC, lado a lado. Mantém a mesma disposição (linha e coluna) da planilha. */
   function parseVolume(values) {
-    var tr = -1, tc = -1, r, c;
-    for (r = 0; r < Math.min(values.length, 25) && tr < 0; r++) {
-      var row = values[r] || [];
-      for (c = 0; c < row.length; c++) if (norm(row[c]).indexOf('volumependente') >= 0) { tr = r; tc = c; break; }
+    var tr = -1, tc = -1, r, c, hr = -1;
+    for (r = 0; r < Math.min(values.length, 15) && hr < 0; r++) {
+      if ((values[r] || []).some(function (x) { return norm(x).indexOf('placa') >= 0; })) hr = r;
     }
+    function find(test, upTo) {
+      for (var rr = 0; rr < upTo && tr < 0; rr++) {
+        var row = values[rr] || [];
+        for (var cc = 0; cc < row.length; cc++) if (test(norm(row[cc]))) { tr = rr; tc = cc; break; }
+      }
+    }
+    var lim = Math.min(values.length, 25);
+    find(function (n) { return n.indexOf('pendente') >= 0 && n.indexOf('svc') >= 0; }, lim);
+    if (tr < 0) find(function (n) { return n.indexOf('svc') >= 0 && n.indexOf('turno') >= 0; }, lim);
+    if (tr < 0 && hr > 0) find(function (n) { return n.indexOf('svc') >= 0; }, Math.min(hr, lim));
     if (tr < 0) return null;
     var items = [], nrows = 0, ncols = 0;
     for (r = tr + 1; r < Math.min(values.length, tr + 13); r++) {
@@ -558,7 +589,7 @@ td.og.empty, td.tot.empty { color: var(--muted); font-weight: 400; }
       emp.hidden = false; emp.textContent = '';
       if (!state.rows.length) {
         if (!state.loaded) emp.appendChild(h('strong', null, 'Carregando a planilha…'));
-        else { emp.appendChild(h('strong', null, 'Sem caminhões para mostrar')); emp.appendChild(document.createTextNode('A aba ' + VIEWS[cur].label + ' não tem linhas com placa no momento.')); }
+        else { emp.appendChild(h('strong', null, 'Sem caminhões para mostrar')); emp.appendChild(document.createTextNode('A aba ' + VIEWS[cur].name + ' não tem linhas com placa no momento.')); }
       }
       else { emp.appendChild(h('strong', null, 'Nenhum caminhão nos status marcados')); emp.appendChild(document.createTextNode('Marque outro status na lista Status.')); }
     } else emp.hidden = true;
@@ -581,7 +612,7 @@ td.og.empty, td.tot.empty { color: var(--muted); font-weight: 400; }
       if (!(state.loaded && state.source === 'sheet')) { box.hidden = true; return; }
       box.hidden = false; $('volTitle').textContent = 'Volume pendente por SVC';
       grid.style.gridTemplateColumns = '1fr';
-      grid.appendChild(h('div', 'vol-hint', 'Não encontrei o quadro "VOLUME PENDENTE POR SVC" no topo da aba ' + VIEWS[cur].label + '.'));
+      grid.appendChild(h('div', 'vol-hint', 'Não encontrei o quadro de resumo por SVC no topo da aba ' + VIEWS[cur].name + '.'));
       return;
     }
     box.hidden = false; $('volTitle').textContent = v.title;
@@ -649,7 +680,7 @@ td.og.empty, td.tot.empty { color: var(--muted); font-weight: 400; }
       .catch(function (e) {
         var keep = st.rows.length && st.source === 'sheet';
         var why = /failed to fetch|networkerror|load failed/i.test(e.message || '') ? 'sem acesso ao Google: confira a internet desta tela e se a planilha continua publicada na web' : (e.message || 'erro de rede');
-        st.note = { kind: 'err', text: 'Não consegui ler a aba ' + VIEWS[key].label + ' (' + why + '). ' + (keep ? 'Mostrando o último dado recebido.' : 'Vou tentar de novo no próximo ciclo.') };
+        st.note = { kind: 'err', text: 'Não consegui ler a aba ' + VIEWS[key].name + ' (' + why + '). ' + (keep ? 'Mostrando o último dado recebido.' : 'Vou tentar de novo no próximo ciclo.') };
         st.loaded = true;
         if (st === state) render();
       })
@@ -673,9 +704,10 @@ td.og.empty, td.tot.empty { color: var(--muted); font-weight: 400; }
 
   /* ---------- troca de visão T1 / T3 ---------- */
   function syncViewUi() {
-    $('viewTag').textContent = VIEWS[cur].label;
-    document.title = 'Recebimento ' + VIEWS[cur].label;
+    $('viewTag').textContent = VIEWS[cur].group + ' ' + VIEWS[cur].label;
+    document.title = 'Recebimento ' + VIEWS[cur].name;
     Array.prototype.forEach.call($('views').querySelectorAll('[data-view]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-view') === cur)); });
+    Array.prototype.forEach.call($('views').querySelectorAll('.vg'), function (g) { g.classList.toggle('on', !!g.querySelector('[data-view="' + cur + '"]')); });
   }
   function setView(k) {
     if (!VIEWS[k] || k === cur) return;
@@ -686,7 +718,9 @@ td.og.empty, td.tot.empty { color: var(--muted); font-weight: 400; }
   document.addEventListener('keydown', function (e) {
     var tag = (e.target && e.target.tagName) || '';
     if (e.ctrlKey || e.metaKey || e.altKey || /input|textarea/i.test(tag)) return;
-    if (e.key === '1') setView('t1'); else if (e.key === '3') setView('t3');
+    var g = cur.split('-')[0], t = cur.split('-')[1];
+    if (e.key === '1') setView(g + '-t1'); else if (e.key === '3') setView(g + '-t3');
+    else if (e.key === 'p' || e.key === 'P') setView('pos-' + t); else if (e.key === 'v' || e.key === 'V') setView('vol-' + t);
   });
 
   /* ---------- filter popover ---------- */
