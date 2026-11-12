@@ -337,17 +337,15 @@ td.og.empty, td.tot.empty { color: var(--muted); font-weight: 400; }
   if (!VIEWS[cur]) cur = 'vol-t3';
   function newState() { return { rows: [], vol: null, source: 'none', loaded: false, updatedAt: Date.now(), note: null }; }
   var S = {}, H = {};
-  Object.keys(VIEWS).forEach(function (k) {
-    S[k] = newState(); H[k] = new Set();
-    var raw = store.get('rcv.hidden.' + k) || (k.indexOf('vol-') === 0 ? store.get('rcv.hidden.' + k.slice(4)) : null);
-    try { JSON.parse(raw || '[]').forEach(function (x) { H[k].add(x); }); } catch (e) {}
-  });
+  /* Ao abrir, estes status começam desmarcados no filtro (dá para marcar de novo a qualquer momento). */
+  var DEFAULT_HIDDEN = ['Finalizado', 'Cancelado'];
+  Object.keys(VIEWS).forEach(function (k) { S[k] = newState(); H[k] = new Set(DEFAULT_HIDDEN); });
   var state = S[cur], hidden = H[cur];
   var timer = null;
-  function saveHidden() { store.set('rcv.hidden.' + cur, JSON.stringify(Array.from(hidden))); }
+  function saveHidden() { /* o filtro sempre volta ao padrão quando o painel é aberto */ }
 
   /* Opções de status definidas na planilha, na ordem em que aparecem no filtro. */
-  var STATUS_ORDER = ['Pendente', 'Em curso', 'Finalizado'];
+  var STATUS_ORDER = ['Pendente', 'Em curso', 'Finalizado', 'Cancelado'];
   for (var d = 1; d <= 14; d++) STATUS_ORDER.push('Doca ' + (d < 10 ? '0' : '') + d);
   function canonStatus(raw) {
     var t = String(raw == null ? '' : raw).trim();
@@ -357,6 +355,7 @@ td.og.empty, td.tot.empty { color: var(--muted); font-weight: 400; }
     if (n === 'pendente') return 'Pendente';
     if (n === 'emcurso') return 'Em curso';
     if (n === 'finalizado') return 'Finalizado';
+    if (n === 'cancelado' || n === 'cancelada') return 'Cancelado';
     return t;
   }
   function isDoca(x) { return /^Doca /.test(x); }
